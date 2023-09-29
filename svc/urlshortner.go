@@ -1,20 +1,34 @@
 package api
 
-type ShortURL struct {
-	ID     string
-	URL    string
-	Domain string
-}
+type Mode string
+
+const (
+	Random Mode = "RANDOM"
+	Phase  Mode = "Phase"
+)
 
 type URLShortner struct {
+	mode    Mode
+	length  int
+	charset string
 }
 
-func (u *URLShortner) Shorten() (*ShortURL, error) {
-	// TODO: Actual business logic
-	return nil, nil
+func NewKeywordURLShortner(length int) URLShortner {
+	return URLShortner{
+		mode:   Phase,
+		length: length,
+	}
 }
 
-func (u *URLShortner) LengthenURL() (string, error) {
+func NewRandomURLShortner(charset string, length int) URLShortner {
+	return URLShortner{
+		mode:    Random,
+		charset: charset,
+		length:  length,
+	}
+}
+
+func (u *URLShortner) Shorten() (string, error) {
 	// TODO: Actual business logic
 	return "", nil
 }
