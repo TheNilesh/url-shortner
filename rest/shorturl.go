@@ -12,12 +12,14 @@ import (
 
 type ShortURL struct {
 	store       store.KVStore
+	revStore    store.KVStore
 	urlShortner svc.URLShortner
 }
 
-func NewShortURL(store store.KVStore, urlShortner svc.URLShortner) *ShortURL {
+func NewShortURL(store store.KVStore, revStore store.KVStore, urlShortner svc.URLShortner) *ShortURL {
 	return &ShortURL{
 		store:       store,
+		revStore:    revStore,
 		urlShortner: urlShortner,
 	}
 }
@@ -28,11 +30,29 @@ type URL struct {
 }
 
 func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
+	// TODO: This function is too big, break it down into smaller functions
 	// TODO: Prevent OOM/buffer overflow by not parsing large request body
-	var data URL
+	var req URL
 	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&data); err != nil {
+	if err := decoder.Decode(&req); err != nil {
 		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
+		return
+	}
+
+	shortURL, err := s.revStore.Get(req.TargetURL)
+	if err == nil {
+		if req.ShortPath != "" && req.ShortPath != shortURL {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		shortURL = fmt.Sprintf("/%s", shortURL)
+		w.Header().Set("Location", fmt.Sprintf("/%s", shortURL))
+		w.WriteHeader(http.StatusCreated)
+		return
+	}
+	if err != nil && err != store.ErrKeyNotFound {
+		// TODO: Log
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -40,22 +60,53 @@ func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
 	// and map it with http timeout. ie, if http request times out,
 	// cancel the context
 
-	var shortURL string
-	// FIXME: Following loop will execute indefinitely if shortPaths are exhausted
-	for exists := true; exists; {
-		shortURL = s.urlShortner.Shorten(data.TargetURL)
-
-		var err error
-		exists, err = s.store.Exists(shortURL)
-		if err != nil {
-			// TODO: Log
+	if req.ShortPath != "" {
+		targetURL, err := s.store.Get(req.ShortPath)
+		if err != nil && err != store.ErrKeyNotFound {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		if err == nil {
+			if targetURL == req.TargetURL {
+				shortURL = fmt.Sprintf("/%s", req.ShortPath)
+				w.Header().Set("Location", fmt.Sprintf("/%s", shortURL))
+				w.WriteHeader(http.StatusCreated)
+				return
+			} else {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+		}
 	}
 
-	err := s.store.Put(shortURL, data.TargetURL)
+	if req.ShortPath == "" {
+		// FIXME: Following loop will execute indefinitely if shortPaths are exhausted
+		for exists := true; exists; {
+			shortURL = s.urlShortner.Shorten(req.TargetURL)
+			exists, err = s.store.Exists(shortURL)
+			if err != nil {
+				// TODO: Log
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+	} else {
+		shortURL = req.ShortPath
+	}
+
+	err = s.store.Put(shortURL, req.TargetURL)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	err = s.revStore.Put(req.TargetURL, shortURL)
+	if err != nil {
+		// TODO: Log
+		err := s.store.Delete(shortURL)
+		if err != nil {
+			// TODO: Log
+			fmt.Println("Failed to delete shortURL", err)
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

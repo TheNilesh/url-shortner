@@ -11,9 +11,10 @@ import (
 
 func main() {
 	r := mux.NewRouter()
-	s := rest.NewShortURL(store.NewKVStore(), svc.NewRandomURLShortner(5))
+	s := rest.NewShortURL(store.NewKVStore(), store.NewKVStore(), svc.NewRandomURLShortner(5))
 
 	r.HandleFunc("/", s.Create).Methods("POST")
+	//TODO: non existent short path returns method not allowed, it should return 404
 	r.HandleFunc("/{id}", s.Get).Methods("GET")
 	// r.HandleFunc("/{id}", s.Create).Methods("PUT")
 	r.HandleFunc("/{id}", s.Delete).Methods("DELETE")
