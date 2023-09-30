@@ -5,12 +5,13 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/thenilesh/url-shortner/rest"
+	"github.com/thenilesh/url-shortner/store"
+	"github.com/thenilesh/url-shortner/svc"
 )
 
 func main() {
-	// TODO: add gorilla mux code
 	r := mux.NewRouter()
-	s := rest.ShortURL{}
+	s := rest.NewShortURL(store.NewKVStore(), svc.NewRandomURLShortner(5))
 
 	r.HandleFunc("/", s.Create).Methods("POST")
 	r.HandleFunc("/{id}", s.Get).Methods("GET")

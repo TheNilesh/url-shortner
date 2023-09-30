@@ -1,0 +1,9 @@
+POST http://localhost:8080
+
+{
+    "target_url": "https://aws.amazon.com/blogs/mt/introducing-aws-appconfig-lambda-extension-deploying-application-configuration-serverless/"
+}
+
+###
+
+GET http://localhost:8080/swq9u

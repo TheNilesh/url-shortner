@@ -5,15 +5,21 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/thenilesh/url-shortner/store"
 	"github.com/thenilesh/url-shortner/svc"
 )
 
 type ShortURL struct {
-	// TODO: Use svc.urlShortner
-	// TODO: use store
 	store       store.KVStore
 	urlShortner svc.URLShortner
+}
+
+func NewShortURL(store store.KVStore, urlShortner svc.URLShortner) *ShortURL {
+	return &ShortURL{
+		store:       store,
+		urlShortner: urlShortner,
+	}
 }
 
 type URL struct {
@@ -22,9 +28,7 @@ type URL struct {
 }
 
 func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Request received for create")
-
-	// TODO: Prevent OOM/buffer overflow  by not parsing large request body
+	// TODO: Prevent OOM/buffer overflow by not parsing large request body
 	var data URL
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&data); err != nil {
@@ -55,13 +59,21 @@ func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Location", fmt.Sprintf("/%s", shortURL))
 	w.WriteHeader(http.StatusCreated)
 }
 
 func (s *ShortURL) Get(w http.ResponseWriter, r *http.Request) {
 	// TODO: if do not redirect query param is included then return ShortURL resource
 	// otherwise redirect user to the targetURL
-
+	vars := mux.Vars(r)
+	shortPath := vars["id"]
+	targetURL, err := s.store.Get(shortPath)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	http.Redirect(w, r, targetURL, http.StatusMovedPermanently)
 }
 
 func (s *ShortURL) Put(w http.ResponseWriter, r *http.Request) {
