@@ -1,10 +1,10 @@
-package api
+package svc
 
 type Mode string
 
 const (
-	Random Mode = "RANDOM"
-	Phase  Mode = "Phase"
+	Random Mode = "Random"
+	Phrase Mode = "Phrase"
 )
 
 type URLShortner struct {
@@ -15,7 +15,7 @@ type URLShortner struct {
 
 func NewKeywordURLShortner(length int) URLShortner {
 	return URLShortner{
-		mode:   Phase,
+		mode:   Phrase,
 		length: length,
 	}
 }
@@ -28,7 +28,7 @@ func NewRandomURLShortner(charset string, length int) URLShortner {
 	}
 }
 
-func (u *URLShortner) Shorten() (string, error) {
+func (u *URLShortner) Shorten(longURL string) string {
 	// TODO: Actual business logic
-	return "", nil
+	return ""
 }
