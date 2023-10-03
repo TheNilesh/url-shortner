@@ -3,43 +3,52 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/thenilesh/url-shortner/svc"
 )
 
-type ShortURL struct {
+const MaxRequestBodySize = 1048576 // 1 MB
+
+type ShortURLHandler struct {
 	urlShortner svc.URLShortner
 }
 
-func NewShortURL(urlShortner svc.URLShortner) *ShortURL {
-	return &ShortURL{
+func NewShortURL(urlShortner svc.URLShortner) *ShortURLHandler {
+	return &ShortURLHandler{
 		urlShortner: urlShortner,
 	}
 }
 
-type URL struct {
-	ShortPath string `json:"short_path"` // User provided short path
+type ShortURL struct {
+	// Optional user provided short path, may be blank
+	ShortPath string `json:"short_path"`
 	TargetURL string `json:"target_url"`
 }
 
-func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
-
-	// TODO: Prevent OOM/buffer overflow by not parsing large request body
-	var req URL
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&req); err != nil {
+func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
+	// Prevent OOM/buffer overflow
+	limitReader := io.LimitReader(r.Body, MaxRequestBodySize)
+	var shortURL ShortURL
+	decoder := json.NewDecoder(limitReader)
+	if err := decoder.Decode(&shortURL); err != nil {
+		if err == io.EOF {
+			http.Error(w, "Request body is too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
 		return
 	}
+	defer r.Body.Close()
 
-	// TODO: Validate request body, shortPath should be alphanumeric, no spaces allowed
-	shortPath, err := s.urlShortner.CreateShortPath(req.ShortPath, req.TargetURL)
+	shortPath, err := s.urlShortner.CreateShortPath(shortURL.ShortPath, shortURL.TargetURL)
 	if err != nil {
 		switch err {
 		case svc.ErrServerError:
 			// TODO: Include error message in response
+			// TODO: Log error
 			w.WriteHeader(http.StatusInternalServerError)
 		case svc.ErrConflict:
 			w.WriteHeader(http.StatusConflict)
@@ -54,7 +63,7 @@ func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (s *ShortURL) Get(w http.ResponseWriter, r *http.Request) {
+func (s *ShortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// TODO: if do not redirect query param is included then return ShortURL resource
 	// otherwise redirect user to the targetURL
 	vars := mux.Vars(r)
@@ -67,10 +76,10 @@ func (s *ShortURL) Get(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, targetURL, http.StatusMovedPermanently)
 }
 
-func (s *ShortURL) Put(w http.ResponseWriter, r *http.Request) {
+func (s *ShortURLHandler) Put(w http.ResponseWriter, r *http.Request) {
 	//TODO: Implement
 }
 
-func (s *ShortURL) Delete(w http.ResponseWriter, r *http.Request) {
+func (s *ShortURLHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	//TODO: Implement
 }

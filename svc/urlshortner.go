@@ -81,13 +81,16 @@ func (u *URLShortner) doShorten(shortPath string, targetURL string) (string, err
 	if len(shortPath) == 0 {
 		shortPath = u.generateShortPath()
 	}
+	// FIXME: Get/Exists and Put calls from this file are not atomic.
+	// This can lead to following inconsistent states.
+	// i. existing shortpath gets replaced, both returns success
+	// ii. Same targetURL gets shortened twice with different shortpaths
 	err := u.targetURLStore.Put(shortPath, targetURL)
 	if err != nil {
 		return "", ErrServerError
 	}
 	err = u.shortPathStore.Put(targetURL, shortPath)
 	if err != nil {
-		// rollback the targetURLStore
 		u.targetURLStore.Delete(shortPath)
 		return "", ErrServerError
 	}
@@ -119,7 +122,7 @@ func (u *URLShortner) lookupShortPath(targetURL string) (string, bool, error) {
 func (u *URLShortner) generateShortPath() string {
 	if u.mode == Phrase {
 		// TODO: Implement
-		return "hello"
+		panic("Phrase mode not implemented")
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	randomBytes := make([]byte, u.length)
