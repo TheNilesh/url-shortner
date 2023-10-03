@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"math/rand"
+	"net/url"
 	"strings"
 	"time"
 
@@ -25,14 +26,16 @@ type URLShortner struct {
 	targetURLStore store.KVStore
 	// Maps targetURL to shortPath
 	shortPathStore store.KVStore
+	metrics        *metrics
 }
 
-func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore) URLShortner {
+func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore, metrics *metrics) URLShortner {
 	return URLShortner{
 		mode:           Random,
 		length:         length,
 		targetURLStore: targetURLStore,
 		shortPathStore: shortPathStore,
+		metrics:        metrics,
 	}
 }
 
@@ -114,6 +117,7 @@ func (u *URLShortner) doShorten(ctx context.Context, shortPath string, targetURL
 			}
 			return "", NewErrServerError("could not save targetURL", err)
 		}
+		u.metrics.IncDomainCount(extractDomainFromURL(targetURL))
 		return shortPath, nil
 	}
 	return "", NewErrServerError("could not find available short path", nil)
@@ -158,6 +162,10 @@ func validateTargetURL(targetURL string) error {
 	if len(targetURL) != len(strings.TrimSpace(targetURL)) {
 		return NewErrValidation("targetURL contains leading or trailing spaces")
 	}
+	_, err := url.Parse(targetURL)
+	if err != nil {
+		return NewErrValidation("targetURL is not valid")
+	}
 	return nil
 }
 
@@ -180,4 +188,9 @@ func removeTrailingSlash(targetURL string) string {
 		targetURL = targetURL[:len(targetURL)-1]
 	}
 	return targetURL
+}
+
+func extractDomainFromURL(rawURL string) string {
+	u, _ := url.Parse(rawURL)
+	return u.Hostname()
 }

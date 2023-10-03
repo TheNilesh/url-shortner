@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/thenilesh/url-shortner/rest"
 	"github.com/thenilesh/url-shortner/store"
@@ -29,7 +30,8 @@ func main() {
 	r.Use(RequestIDMiddleware)
 	urlShortner := buildURLShortner(log)
 	s := rest.NewShortURLHandler(log, urlShortner)
-
+	log.Info("Registering metrics route")
+	r.Handle("/metrics", promhttp.Handler())
 	log.Info("Registering routes")
 	r.HandleFunc("/", s.Create).Methods("POST")
 	r.HandleFunc("/{id}", s.Get).Methods("GET")
@@ -46,6 +48,7 @@ func main() {
 }
 
 func buildURLShortner(log *logrus.Logger) *svc.URLShortner {
+	// TODO: Move redis connection details to external config
 	redis, err := store.NewRedisClient("localhost:6379", "", 0)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to redis")
@@ -62,7 +65,8 @@ func buildURLShortner(log *logrus.Logger) *svc.URLShortner {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create shortPathStore")
 	}
-	urlShortner := svc.NewURLShortner(6, targetURLStore, shortPathStore)
+	metrics := svc.NewMetrics()
+	urlShortner := svc.NewURLShortner(6, targetURLStore, shortPathStore, metrics)
 	return &urlShortner
 }
 
