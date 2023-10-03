@@ -2,7 +2,6 @@ package svc
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"strings"
 	"time"
@@ -38,7 +37,7 @@ func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore sto
 }
 
 func (u *URLShortner) GetTargetURL(ctx context.Context, shortPath string) (string, error) {
-	targetURL, found, err := u.lookupTargetURL(shortPath)
+	targetURL, found, err := u.lookupTargetURL(ctx, shortPath)
 	if err != nil {
 		return "", NewErrServerError("could not lookup shortpath", err)
 	}
@@ -57,9 +56,9 @@ func (u *URLShortner) CreateShortPath(ctx context.Context, shortPath string, tar
 	}
 	targetURL = removeTrailingSlash(targetURL)
 	if len(shortPath) > 0 { // isShortPathProvidedInRequest ?
-		oldTargetURL, found, err := u.lookupTargetURL(shortPath)
+		oldTargetURL, found, err := u.lookupTargetURL(ctx, shortPath)
 		if err != nil {
-			return "", fmt.Errorf("could not lookup shortpath: %w", err)
+			return "", NewErrServerError("could not lookup shortpath", err)
 		}
 		if found {
 			if oldTargetURL == targetURL {
@@ -69,42 +68,59 @@ func (u *URLShortner) CreateShortPath(ctx context.Context, shortPath string, tar
 			}
 		}
 	}
-	existingShortPath, found, err := u.lookupShortPath(targetURL)
+	existingShortPath, found, err := u.lookupShortPath(ctx, targetURL)
 	if err != nil {
 		return "", err
 	}
 	if found { // isTargetURLAlreadyShortened
 		return existingShortPath, nil
 	}
-	return u.doShorten(shortPath, targetURL)
+	return u.doShorten(ctx, shortPath, targetURL)
 }
 
-func (u *URLShortner) doShorten(shortPath string, targetURL string) (string, error) {
+func (u *URLShortner) doShorten(ctx context.Context, shortPath string, targetURL string) (string, error) {
+	var shouldGenerateShortPath bool
 	if len(shortPath) == 0 {
 		shortPath = u.generateShortPath()
+		shouldGenerateShortPath = true
 	}
 	// FIXME: Get/Exists and Put calls from this file are not atomic.
 	// This can lead to following inconsistent states.
 	// i. existing shortpath gets replaced, both returns success
 	// ii. Same targetURL gets shortened twice with different shortpaths
-	err := u.targetURLStore.Put(shortPath, targetURL)
-	if err != nil {
-		return "", NewErrServerError("could not save shortpath", err)
-	}
-	err = u.shortPathStore.Put(targetURL, shortPath)
-	if err != nil {
-		errDelete := u.targetURLStore.Delete(shortPath)
-		if errDelete != nil {
-			// TODO: Log error
-			return "", NewErrServerError("could not delete shortpath from store", errDelete)
+	var err error
+	var found bool
+	for i := 0; i < 3; i++ {
+		if found, err = u.targetURLStore.Exists(ctx, shortPath); err != nil {
+			return "", NewErrServerError("could not check if shortpath exists", err)
 		}
-		return "", NewErrServerError("could not save targetURL", err)
+		if found && shouldGenerateShortPath {
+			shortPath = u.generateShortPath()
+			continue
+		}
+		if found {
+			return "", NewErrConflict("shortpath already exists")
+		}
+		err = u.targetURLStore.Put(ctx, shortPath, targetURL)
+		if err != nil {
+			return "", NewErrServerError("could not save shortpath", err)
+		}
+		err = u.shortPathStore.Put(ctx, targetURL, shortPath)
+		if err != nil {
+			errDelete := u.targetURLStore.Delete(ctx, shortPath)
+			if errDelete != nil {
+				// TODO: Log error
+				return "", NewErrServerError("could not delete shortpath from store", errDelete)
+			}
+			return "", NewErrServerError("could not save targetURL", err)
+		}
+		return shortPath, nil
 	}
-	return shortPath, nil
+	return "", NewErrServerError("could not find available short path", nil)
 }
 
-func (u *URLShortner) lookupTargetURL(shortPath string) (string, bool, error) {
-	targetURL, err := u.targetURLStore.Get(shortPath)
+func (u *URLShortner) lookupTargetURL(ctx context.Context, shortPath string) (string, bool, error) {
+	targetURL, err := u.targetURLStore.Get(ctx, shortPath)
 	if err != nil {
 		if err == store.ErrKeyNotFound {
 			return "", false, nil
@@ -114,8 +130,8 @@ func (u *URLShortner) lookupTargetURL(shortPath string) (string, bool, error) {
 	return targetURL, true, nil
 }
 
-func (u *URLShortner) lookupShortPath(targetURL string) (string, bool, error) {
-	shortPath, err := u.shortPathStore.Get(targetURL)
+func (u *URLShortner) lookupShortPath(ctx context.Context, targetURL string) (string, bool, error) {
+	shortPath, err := u.shortPathStore.Get(ctx, targetURL)
 	if err != nil {
 		if err == store.ErrKeyNotFound {
 			return "", false, nil

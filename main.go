@@ -27,7 +27,7 @@ func main() {
 	log.Info("Starting server")
 	r := mux.NewRouter()
 	r.Use(RequestIDMiddleware)
-	urlShortner := svc.NewURLShortner(6, store.NewInMemoryKVStore(), store.NewInMemoryKVStore())
+	urlShortner := buildURLShortner(log)
 	s := rest.NewShortURLHandler(log, urlShortner)
 
 	log.Info("Registering routes")
@@ -43,6 +43,27 @@ func main() {
 	}
 	log.Infof("Starting listening on %s", listenAddr)
 	http.ListenAndServe(listenAddr, nil)
+}
+
+func buildURLShortner(log *logrus.Logger) *svc.URLShortner {
+	redis, err := store.NewRedisClient("localhost:6379", "", 0)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to connect to redis")
+	}
+	err = store.CheckRedisConnection(redis)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to connect to redis")
+	}
+	targetURLStore, err := store.NewRedisKVStore(redis, "target")
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create targetURLStore")
+	}
+	shortPathStore, err := store.NewRedisKVStore(redis, "short")
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create shortPathStore")
+	}
+	urlShortner := svc.NewURLShortner(6, targetURLStore, shortPathStore)
+	return &urlShortner
 }
 
 func RequestIDMiddleware(next http.Handler) http.Handler {

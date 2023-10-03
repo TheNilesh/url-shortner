@@ -19,11 +19,11 @@ const (
 type RequestIDKey string
 
 type ShortURLHandler struct {
-	urlShortner svc.URLShortner
+	urlShortner *svc.URLShortner
 	log         *logrus.Logger
 }
 
-func NewShortURLHandler(log *logrus.Logger, urlShortner svc.URLShortner) *ShortURLHandler {
+func NewShortURLHandler(log *logrus.Logger, urlShortner *svc.URLShortner) *ShortURLHandler {
 	return &ShortURLHandler{
 		log:         log,
 		urlShortner: urlShortner,
@@ -34,6 +34,11 @@ type ShortURL struct {
 	// Optional user provided short path
 	ShortPath string `json:"short_path"`
 	TargetURL string `json:"target_url"`
+}
+
+type ErrorResponse struct {
+	RequestID string `json:"request_id"`
+	Message   string `json:"message"`
 }
 
 func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +70,10 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 		case *svc.ErrValidation:
 			// TODO: Return validation error in response body
 			w.WriteHeader(http.StatusBadRequest)
+		case *svc.ErrConflict:
+			w.WriteHeader(http.StatusConflict)
+		case *svc.ErrServerError:
+			w.WriteHeader(http.StatusInternalServerError)
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -72,7 +81,7 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Location", fmt.Sprintf("/%s", shortPath))
 	w.WriteHeader(http.StatusCreated)
-	log.Infof("Sent response.Location: %s", shortPath)
+	log.Infof("Sent response. shortPath:%s", shortPath)
 }
 
 func (s *ShortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
