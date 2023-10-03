@@ -31,6 +31,18 @@ type URL struct {
 
 func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
 	// TODO: This function is too big, break it down into smaller functions
+	// To break-down, lets list down responsibilities of this function
+	// 1. Decode JSON request body
+	// 2. Check if shortPath is already taken
+	// 3. Check if targetURL is already shortened
+	// 4. If targetURL is already shortened, check if shortPath is same as user provided
+	// 5. If shortPath is not provided, generate a new shortPath
+	// 6. If shortPath is provided, check if it is already taken
+	// 7. If shortPath is already taken, return 409
+	// 8. If shortPath is not taken, store the shortPath and targetURL in store
+	// 9. If storing shortPath and targetURL is successful, return 201
+	// 10. If storing shortPath and targetURL is not successful, return 500
+
 	// TODO: Prevent OOM/buffer overflow by not parsing large request body
 	var req URL
 	decoder := json.NewDecoder(r.Body)
@@ -38,6 +50,8 @@ func (s *ShortURL) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
 		return
 	}
+
+	// TODO: Validate request body, shortPath should be alphanumeric, no spaces allowed
 
 	shortURL, err := s.revStore.Get(req.TargetURL)
 	if err == nil {
