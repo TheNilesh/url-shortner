@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	MaxRequestBodySize = 1048576 // 1 MB
+	maxRequestBodySize = 104875 // 1 MB
 )
 
 type RequestIDKey string
@@ -45,20 +45,22 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID, _ := r.Context().Value(RequestIDKey("requestID")).(string)
 	log := s.log.WithField("requestID", requestID)
 	log.Infof("Received request. %s %s", r.Method, r.URL.Path)
-
-	// TODO: Handle case when request is cancelled by client
-
+	// TODO: Handle case when request is cancelled by client using context
 	// Prevent OOM/buffer overflow
-	limitReader := io.LimitReader(r.Body, MaxRequestBodySize)
+	limitReader := io.LimitReader(r.Body, maxRequestBodySize)
 	var shortURL ShortURL
 	decoder := json.NewDecoder(limitReader)
 	if err := decoder.Decode(&shortURL); err != nil {
-		if err == io.EOF {
-			log.Error(err)
-			http.Error(w, "Request body is too large", http.StatusRequestEntityTooLarge)
+		log.Error(err)
+		if err == io.ErrUnexpectedEOF {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(marshalErrorMessage(requestID, "Request body is too large or invalid JSON"))
 			return
 		}
-		http.Error(w, "Failed to decode JSON", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(marshalErrorMessage(requestID, "Failed to decode JSON"))
 		return
 	}
 	defer r.Body.Close()
@@ -68,7 +70,6 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 		switch err.(type) {
 		case *svc.ErrValidation:
-			// TODO: Return validation error in response body
 			w.WriteHeader(http.StatusBadRequest)
 		case *svc.ErrConflict:
 			w.WriteHeader(http.StatusConflict)
@@ -77,10 +78,12 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(marshalErrorMessage(requestID, err.Error()))
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("/%s", shortPath))
 	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Location", fmt.Sprintf("/%s", shortPath))
 	log.Infof("Sent response. shortPath:%s", shortPath)
 }
 
@@ -95,12 +98,12 @@ func (s *ShortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
 	shortPath := vars["id"]
 	targetURL, err := s.urlShortner.GetTargetURL(context.TODO(), shortPath)
 	if err != nil {
-		log.Errorf("Failed to get targetURL for shortPath: %s", shortPath)
+		log.Errorf("Failed to get targetURL for shortPath: %f", err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	http.Redirect(w, r, targetURL, http.StatusMovedPermanently)
-	log.Infof("Redirected to targetURL. %s->%s", shortPath, targetURL)
+	log.Infof("Redirected. %s->%s", shortPath, targetURL)
 }
 
 func (s *ShortURLHandler) Put(w http.ResponseWriter, r *http.Request) {
@@ -109,4 +112,13 @@ func (s *ShortURLHandler) Put(w http.ResponseWriter, r *http.Request) {
 
 func (s *ShortURLHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	//TODO: Implement
+}
+
+func marshalErrorMessage(requestID string, msg string) []byte {
+	errorResponse := ErrorResponse{
+		RequestID: requestID,
+		Message:   msg,
+	}
+	dataBytes, _ := json.Marshal(errorResponse)
+	return dataBytes
 }
