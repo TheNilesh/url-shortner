@@ -15,7 +15,7 @@ type KVStore interface {
 	Delete(key string) error
 }
 
-func NewKVStore() KVStore {
+func NewInMemoryKVStore() KVStore {
 	return &kvStore{}
 }
 

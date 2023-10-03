@@ -11,7 +11,8 @@ import (
 
 func main() {
 	r := mux.NewRouter()
-	s := rest.NewShortURL(store.NewKVStore(), store.NewKVStore(), svc.NewRandomURLShortner(5))
+	urlShortner := svc.NewURLShortner(6, store.NewInMemoryKVStore(), store.NewInMemoryKVStore())
+	s := rest.NewShortURL(urlShortner)
 
 	r.HandleFunc("/", s.Create).Methods("POST")
 	//TODO: non existent short path returns method not allowed, it should return 404

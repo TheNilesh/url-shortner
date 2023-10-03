@@ -8,3 +8,13 @@ POST http://localhost:8080
 ###
 
 GET http://localhost:8080/aws-lambda-extension
+
+###
+POST http://localhost:8080
+
+{
+    "target_url": "https://www.linkedin.com/in/nilesh-akhade/"
+}
+
+###
+GET http://localhost:8080/e2gmu5
