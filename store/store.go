@@ -19,7 +19,7 @@ func NewInMemoryKVStore() KVStore {
 	return &kvStore{}
 }
 
-// TODO: Implement KV store using golang map for poc and then redis
+// TODO: Implement KV store using redis
 type kvStore map[string]string
 
 func (k *kvStore) Put(key string, value string) error {

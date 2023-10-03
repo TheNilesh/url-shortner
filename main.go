@@ -1,25 +1,56 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"os"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
 	"github.com/thenilesh/url-shortner/rest"
 	"github.com/thenilesh/url-shortner/store"
 	"github.com/thenilesh/url-shortner/svc"
 )
 
 func main() {
-	r := mux.NewRouter()
-	urlShortner := svc.NewURLShortner(6, store.NewInMemoryKVStore(), store.NewInMemoryKVStore())
-	s := rest.NewShortURL(urlShortner)
+	log := logrus.New()
+	logLevel := os.Getenv("LOG_LEVEL")
+	if len(logLevel) != 0 {
+		logLevel, err := logrus.ParseLevel(logLevel)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to parse log level")
+		}
+		log.Level = logLevel
+	}
 
+	log.Info("Starting server")
+	r := mux.NewRouter()
+	r.Use(RequestIDMiddleware)
+	urlShortner := svc.NewURLShortner(6, store.NewInMemoryKVStore(), store.NewInMemoryKVStore())
+	s := rest.NewShortURLHandler(log, urlShortner)
+
+	log.Info("Registering routes")
 	r.HandleFunc("/", s.Create).Methods("POST")
-	//TODO: non existent short path returns method not allowed, it should return 404
 	r.HandleFunc("/{id}", s.Get).Methods("GET")
-	// r.HandleFunc("/{id}", s.Create).Methods("PUT")
+	r.HandleFunc("/{id}", s.Put).Methods("PUT")
 	r.HandleFunc("/{id}", s.Delete).Methods("DELETE")
 	http.Handle("/", r)
 
-	http.ListenAndServe(":8080", nil)
+	listenAddr := os.Getenv("LISTEN_ADDR")
+	if len(listenAddr) == 0 {
+		listenAddr = ":8080"
+	}
+	log.Infof("Starting listening on %s", listenAddr)
+	http.ListenAndServe(listenAddr, nil)
+}
+
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := uuid.New().String()
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, rest.RequestIDKey("requestID"), requestID)
+		r = r.WithContext(ctx)
+		next.ServeHTTP(w, r)
+	})
 }

@@ -1,6 +1,8 @@
 package svc
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"time"
@@ -35,41 +37,41 @@ func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore sto
 	}
 }
 
-func (u *URLShortner) GetTargetURL(shortPath string) (string, error) {
+func (u *URLShortner) GetTargetURL(ctx context.Context, shortPath string) (string, error) {
 	targetURL, found, err := u.lookupTargetURL(shortPath)
 	if err != nil {
-		return "", ErrServerError
+		return "", NewErrServerError("could not lookup shortpath", err)
 	}
 	if !found {
-		return "", store.ErrKeyNotFound
+		return "", NewErrNotFound("shortpath mapping not found")
 	}
 	return targetURL, nil
 }
 
-func (u *URLShortner) CreateShortPath(shortPath string, targetURL string) (string, error) {
-	if !isValidShortPath(shortPath) {
-		return "", NewErrValidationFailed("shortPath is invalid")
+func (u *URLShortner) CreateShortPath(ctx context.Context, shortPath string, targetURL string) (string, error) {
+	if err := validateShortPath(shortPath); err != nil {
+		return "", err
 	}
-	if !isValidTargetURL(targetURL) {
-		return "", NewErrValidationFailed("targetURL is invalid")
+	if err := validateTargetURL(targetURL); err != nil {
+		return "", err
 	}
 	targetURL = removeTrailingSlash(targetURL)
 	if len(shortPath) > 0 { // isShortPathProvidedInRequest ?
 		oldTargetURL, found, err := u.lookupTargetURL(shortPath)
 		if err != nil {
-			return "", ErrServerError
+			return "", fmt.Errorf("could not lookup shortpath: %w", err)
 		}
 		if found {
 			if oldTargetURL == targetURL {
 				return shortPath, nil
 			} else {
-				return "", ErrConflict
+				return "", NewErrConflict("shortpath already exists for different targetURL")
 			}
 		}
 	}
 	existingShortPath, found, err := u.lookupShortPath(targetURL)
 	if err != nil {
-		return "", ErrServerError
+		return "", err
 	}
 	if found { // isTargetURLAlreadyShortened
 		return existingShortPath, nil
@@ -87,12 +89,16 @@ func (u *URLShortner) doShorten(shortPath string, targetURL string) (string, err
 	// ii. Same targetURL gets shortened twice with different shortpaths
 	err := u.targetURLStore.Put(shortPath, targetURL)
 	if err != nil {
-		return "", ErrServerError
+		return "", NewErrServerError("could not save shortpath", err)
 	}
 	err = u.shortPathStore.Put(targetURL, shortPath)
 	if err != nil {
-		u.targetURLStore.Delete(shortPath)
-		return "", ErrServerError
+		errDelete := u.targetURLStore.Delete(shortPath)
+		if errDelete != nil {
+			// TODO: Log error
+			return "", NewErrServerError("could not delete shortpath from store", errDelete)
+		}
+		return "", NewErrServerError("could not save targetURL", err)
 	}
 	return shortPath, nil
 }
@@ -103,7 +109,7 @@ func (u *URLShortner) lookupTargetURL(shortPath string) (string, bool, error) {
 		if err == store.ErrKeyNotFound {
 			return "", false, nil
 		}
-		return "", false, ErrServerError
+		return "", false, NewErrServerError("could not lookup shortpath for target URL", err)
 	}
 	return targetURL, true, nil
 }
@@ -114,7 +120,7 @@ func (u *URLShortner) lookupShortPath(targetURL string) (string, bool, error) {
 		if err == store.ErrKeyNotFound {
 			return "", false, nil
 		}
-		return "", false, ErrServerError
+		return "", false, NewErrServerError("could not lookup shortpath for target URL", err)
 	}
 	return shortPath, true, nil
 }
@@ -122,7 +128,7 @@ func (u *URLShortner) lookupShortPath(targetURL string) (string, bool, error) {
 func (u *URLShortner) generateShortPath() string {
 	if u.mode == Phrase {
 		// TODO: Implement
-		panic("Phrase mode not implemented")
+		panic("phrase mode not implemented")
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	randomBytes := make([]byte, u.length)
@@ -132,20 +138,23 @@ func (u *URLShortner) generateShortPath() string {
 	return string(randomBytes)
 }
 
-func isValidTargetURL(targetURL string) bool {
-	return len(targetURL) == len(strings.TrimSpace(targetURL))
+func validateTargetURL(targetURL string) error {
+	if len(targetURL) != len(strings.TrimSpace(targetURL)) {
+		return NewErrValidation("targetURL contains leading or trailing spaces")
+	}
+	return nil
 }
 
-func isValidShortPath(shortPath string) bool {
+func validateShortPath(shortPath string) error {
 	if len(shortPath) != len(strings.TrimSpace(shortPath)) {
-		return false
+		return NewErrValidation("shortPath contains leading or trailing spaces")
 	}
 	for _, c := range shortPath {
 		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
-			return false
+			return NewErrValidation("shortPath contains invalid characters")
 		}
 	}
-	return true
+	return nil
 }
 
 // removeTrailingSlash removes slash from the end of the targetURL
