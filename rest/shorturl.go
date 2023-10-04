@@ -80,9 +80,16 @@ func (s *shortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 		case *svc.ErrConflict:
 			w.WriteHeader(http.StatusConflict)
 		case *svc.ErrServerError:
+			// Do not expose internal error to client
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(marshalMessage(requestID, "Something went wrong"))
+			return
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(marshalMessage(requestID, "Something went wrong"))
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(marshalMessage(requestID, err.Error()))
