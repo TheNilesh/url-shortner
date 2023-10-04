@@ -26,10 +26,10 @@ type URLShortner struct {
 	targetURLStore store.KVStore
 	// Maps targetURL to shortPath
 	shortPathStore store.KVStore
-	metrics        *metrics
+	metrics        *Metrics
 }
 
-func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore, metrics *metrics) URLShortner {
+func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore, metrics *Metrics) URLShortner {
 	return URLShortner{
 		mode:           Random,
 		length:         length,

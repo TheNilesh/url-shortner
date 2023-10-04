@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,7 +35,7 @@ type ShortURL struct {
 	TargetURL string `json:"target_url"`
 }
 
-type ErrorResponse struct {
+type Response struct {
 	RequestID string `json:"request_id"`
 	Message   string `json:"message"`
 }
@@ -55,17 +54,17 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if err == io.ErrUnexpectedEOF {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(marshalErrorMessage(requestID, "Request body is too large or invalid JSON"))
+			w.Write(marshalMessage(requestID, "Request body is too large or invalid JSON"))
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(marshalErrorMessage(requestID, "Failed to decode JSON"))
+		w.Write(marshalMessage(requestID, "Failed to decode JSON"))
 		return
 	}
 	defer r.Body.Close()
 
-	shortPath, err := s.urlShortner.CreateShortPath(context.TODO(), shortURL.ShortPath, shortURL.TargetURL)
+	shortPath, err := s.urlShortner.CreateShortPath(r.Context(), shortURL.ShortPath, shortURL.TargetURL)
 	if err != nil {
 		log.Error(err)
 		switch err.(type) {
@@ -79,11 +78,13 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(marshalErrorMessage(requestID, err.Error()))
+		w.Write(marshalMessage(requestID, err.Error()))
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Location", fmt.Sprintf("/%s", shortPath))
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(marshalMessage(requestID, fmt.Sprintf("Created short URL: /%s", shortPath)))
 	log.Infof("Sent response. shortPath:%s", shortPath)
 }
 
@@ -91,14 +92,13 @@ func (s *ShortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
 	requestID, _ := r.Context().Value(RequestIDKey("requestID")).(string)
 	log := s.log.WithField("requestID", requestID)
 	log.Infof("Received request. %s %s", r.Method, r.URL.Path)
-
 	// TODO: if do not redirect query param is included then return ShortURL resource
 	// otherwise redirect user to the targetURL
 	vars := mux.Vars(r)
 	shortPath := vars["id"]
-	targetURL, err := s.urlShortner.GetTargetURL(context.TODO(), shortPath)
+	targetURL, err := s.urlShortner.GetTargetURL(r.Context(), shortPath)
 	if err != nil {
-		log.Errorf("Failed to get targetURL for shortPath: %f", err)
+		log.Errorf("Failed to get targetURL for shortPath: %v", err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -114,11 +114,11 @@ func (s *ShortURLHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	//TODO: Implement
 }
 
-func marshalErrorMessage(requestID string, msg string) []byte {
-	errorResponse := ErrorResponse{
+func marshalMessage(requestID string, msg string) []byte {
+	Response := Response{
 		RequestID: requestID,
 		Message:   msg,
 	}
-	dataBytes, _ := json.Marshal(errorResponse)
+	dataBytes, _ := json.Marshal(Response)
 	return dataBytes
 }
