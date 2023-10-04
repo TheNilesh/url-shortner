@@ -23,10 +23,10 @@ func NewMetricsHandler(log *logrus.Logger, m *svc.Metrics) *metrics {
 func (m *metrics) Get(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "text/plain")
-	for domain, count := range m.metrics.GetDomainCounts() {
-		w.Write([]byte(domain))
+	for _, kv := range m.metrics.GetDomainCounts() {
+		w.Write([]byte(kv.Key))
 		w.Write([]byte(": "))
-		w.Write([]byte(fmt.Sprintf("%d", count)))
+		w.Write([]byte(fmt.Sprintf("%d", kv.Value)))
 		w.Write([]byte("\n"))
 	}
 }
