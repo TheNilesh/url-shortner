@@ -15,6 +15,8 @@ import (
 	"github.com/thenilesh/url-shortner/svc"
 )
 
+const appName = "url-shortner"
+
 func main() {
 
 	initViper()
@@ -93,6 +95,8 @@ func initViper() {
 	viper.SetDefault("redis_db", 0)
 
 	viper.SetConfigName("config")
+	viper.AddConfigPath(fmt.Sprintf("/etc/%s", appName))
 	viper.AddConfigPath(".")
+	viper.SetEnvPrefix("us")
 	viper.AutomaticEnv()
 }
