@@ -1,5 +1,7 @@
 package svc
 
+import "container/heap"
+
 type Metrics struct {
 	domainHeap MaxHeap
 	domainChan chan string
@@ -10,6 +12,7 @@ func NewMetrics() *Metrics {
 		domainHeap: MaxHeap{},
 		domainChan: make(chan string, 10),
 	}
+	heap.Init(&m.domainHeap)
 	return &m
 }
 

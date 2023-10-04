@@ -2,27 +2,32 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"github.com/thenilesh/url-shortner/rest"
 	"github.com/thenilesh/url-shortner/store"
 	"github.com/thenilesh/url-shortner/svc"
 )
 
 func main() {
-	log := logrus.New()
-	logLevel := os.Getenv("LOG_LEVEL")
-	if len(logLevel) != 0 {
-		logLevel, err := logrus.ParseLevel(logLevel)
-		if err != nil {
-			log.WithError(err).Fatal("Failed to parse log level")
-		}
-		log.Level = logLevel
+
+	initViper()
+	if err := viper.ReadInConfig(); err != nil {
+		panic(fmt.Errorf("fatal error config file: %s", err))
 	}
+
+	log := logrus.New()
+	strLogLvl := viper.GetString("log_level")
+	logLevel, err := logrus.ParseLevel(strLogLvl)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to parse log level")
+	}
+	log.Level = logLevel
 
 	log.Info("Starting server")
 	r := mux.NewRouter()
@@ -41,17 +46,16 @@ func main() {
 	r.HandleFunc("/{id}", s.Delete).Methods("DELETE")
 	http.Handle("/", r)
 
-	listenAddr := os.Getenv("LISTEN_ADDR")
-	if len(listenAddr) == 0 {
-		listenAddr = ":8080"
-	}
+	listenAddr := viper.GetString("listen_addr")
 	log.Infof("Starting listening on %s", listenAddr)
 	http.ListenAndServe(listenAddr, nil)
 }
 
 func buildURLShortner(log *logrus.Logger, metrics *svc.Metrics) *svc.URLShortner {
-	// TODO: Move redis connection details to external config
-	redis, err := store.NewRedisClient("localhost:6379", "", 0)
+	redisAddr := viper.GetString("redis_addr")
+	redisPassword := viper.GetString("redis_addr")
+	redisDB := viper.GetInt("redis_db")
+	redis, err := store.NewRedisClient(redisAddr, redisPassword, redisDB)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to redis")
 	}
@@ -79,4 +83,16 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func initViper() {
+	viper.SetDefault("log_level", "info")
+	viper.SetDefault("listen_addr", ":8080")
+	viper.SetDefault("redis_addr", "localhost:6379")
+	viper.SetDefault("redis_password", "")
+	viper.SetDefault("redis_db", 0)
+
+	viper.SetConfigName("config")
+	viper.AddConfigPath(".")
+	viper.AutomaticEnv()
 }
