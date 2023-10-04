@@ -5,22 +5,26 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
-	"github.com/thenilesh/url-shortner/svc"
+	"github.com/thenilesh/url-shortner/metrics"
 )
 
-type metrics struct {
-	log     *logrus.Logger
-	metrics *svc.Metrics
+type MetricsHandler interface {
+	Get(w http.ResponseWriter, r *http.Request)
 }
 
-func NewMetricsHandler(log *logrus.Logger, m *svc.Metrics) *metrics {
-	return &metrics{
+type metricsHandler struct {
+	log     *logrus.Logger
+	metrics metrics.Metrics
+}
+
+func NewMetricsHandler(log *logrus.Logger, m metrics.Metrics) MetricsHandler {
+	return &metricsHandler{
 		log:     log,
 		metrics: m,
 	}
 }
 
-func (m *metrics) Get(w http.ResponseWriter, r *http.Request) {
+func (m *metricsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "text/plain")
 	for _, kv := range m.metrics.GetDomainCounts() {

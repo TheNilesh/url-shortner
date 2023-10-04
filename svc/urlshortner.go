@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thenilesh/url-shortner/metrics"
 	"github.com/thenilesh/url-shortner/store"
 )
 
@@ -16,21 +17,26 @@ const (
 	Random Mode = "Random"
 	Phrase Mode = "Phrase"
 
-	charset = "abcdefghijklmnopqrstuvwxyz-0123456789"
+	charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 )
 
-type URLShortner struct {
+type URLShortner interface {
+	GetTargetURL(ctx context.Context, shortPath string) (string, error)
+	CreateShortPath(ctx context.Context, shortPath string, targetURL string) (string, error)
+}
+
+type urlShortner struct {
 	mode   Mode
 	length int
 	// Maps shortPath to targetURL
 	targetURLStore store.KVStore
 	// Maps targetURL to shortPath
 	shortPathStore store.KVStore
-	metrics        *Metrics
+	metrics        metrics.Metrics
 }
 
-func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore, metrics *Metrics) URLShortner {
-	return URLShortner{
+func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore, metrics metrics.Metrics) URLShortner {
+	return &urlShortner{
 		mode:           Random,
 		length:         length,
 		targetURLStore: targetURLStore,
@@ -39,7 +45,7 @@ func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore sto
 	}
 }
 
-func (u *URLShortner) GetTargetURL(ctx context.Context, shortPath string) (string, error) {
+func (u *urlShortner) GetTargetURL(ctx context.Context, shortPath string) (string, error) {
 	targetURL, found, err := u.lookupTargetURL(ctx, shortPath)
 	if err != nil {
 		return "", NewErrServerError("could not lookup shortpath", err)
@@ -50,7 +56,7 @@ func (u *URLShortner) GetTargetURL(ctx context.Context, shortPath string) (strin
 	return targetURL, nil
 }
 
-func (u *URLShortner) CreateShortPath(ctx context.Context, shortPath string, targetURL string) (string, error) {
+func (u *urlShortner) CreateShortPath(ctx context.Context, shortPath string, targetURL string) (string, error) {
 	if err := validateShortPath(shortPath); err != nil {
 		return "", err
 	}
@@ -81,7 +87,7 @@ func (u *URLShortner) CreateShortPath(ctx context.Context, shortPath string, tar
 	return u.doShorten(ctx, shortPath, targetURL)
 }
 
-func (u *URLShortner) doShorten(ctx context.Context, shortPath string, targetURL string) (string, error) {
+func (u *urlShortner) doShorten(ctx context.Context, shortPath string, targetURL string) (string, error) {
 	var shouldGenerateShortPath bool
 	if len(shortPath) == 0 {
 		shortPath = u.generateShortPath()
@@ -123,7 +129,7 @@ func (u *URLShortner) doShorten(ctx context.Context, shortPath string, targetURL
 	return "", NewErrServerError("could not find available short path", nil)
 }
 
-func (u *URLShortner) lookupTargetURL(ctx context.Context, shortPath string) (string, bool, error) {
+func (u *urlShortner) lookupTargetURL(ctx context.Context, shortPath string) (string, bool, error) {
 	targetURL, err := u.targetURLStore.Get(ctx, shortPath)
 	if err != nil {
 		if err == store.ErrKeyNotFound {
@@ -134,7 +140,7 @@ func (u *URLShortner) lookupTargetURL(ctx context.Context, shortPath string) (st
 	return targetURL, true, nil
 }
 
-func (u *URLShortner) lookupShortPath(ctx context.Context, targetURL string) (string, bool, error) {
+func (u *urlShortner) lookupShortPath(ctx context.Context, targetURL string) (string, bool, error) {
 	shortPath, err := u.shortPathStore.Get(ctx, targetURL)
 	if err != nil {
 		if err == store.ErrKeyNotFound {
@@ -145,7 +151,7 @@ func (u *URLShortner) lookupShortPath(ctx context.Context, targetURL string) (st
 	return shortPath, true, nil
 }
 
-func (u *URLShortner) generateShortPath() string {
+func (u *urlShortner) generateShortPath() string {
 	if u.mode == Phrase {
 		// TODO: Implement
 		panic("phrase mode not implemented")
@@ -177,6 +183,9 @@ func validateShortPath(shortPath string) error {
 		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
 			return NewErrValidation("shortPath contains invalid characters")
 		}
+	}
+	if shortPath == "metrics" {
+		return NewErrValidation("shortPath is reserved")
 	}
 	return nil
 }

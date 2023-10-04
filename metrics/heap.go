@@ -1,4 +1,4 @@
-package svc
+package metrics
 
 import (
 	"container/heap"

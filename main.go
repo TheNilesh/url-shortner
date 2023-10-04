@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/thenilesh/url-shortner/metrics"
 	"github.com/thenilesh/url-shortner/rest"
 	"github.com/thenilesh/url-shortner/store"
 	"github.com/thenilesh/url-shortner/svc"
@@ -32,10 +33,10 @@ func main() {
 	log.Info("Starting server")
 	r := mux.NewRouter()
 	r.Use(RequestIDMiddleware)
-	m := svc.NewMetrics()
-	m.Start()
-	metricsHandler := rest.NewMetricsHandler(log, m)
-	urlShortner := buildURLShortner(log, m)
+	metrics := metrics.NewMetrics()
+	metrics.Start()
+	metricsHandler := rest.NewMetricsHandler(log, metrics)
+	urlShortner := buildURLShortner(log, metrics)
 	s := rest.NewShortURLHandler(log, urlShortner)
 	log.Info("Registering metrics route")
 	r.HandleFunc("/metrics", metricsHandler.Get).Methods("GET")
@@ -51,7 +52,7 @@ func main() {
 	http.ListenAndServe(listenAddr, nil)
 }
 
-func buildURLShortner(log *logrus.Logger, metrics *svc.Metrics) *svc.URLShortner {
+func buildURLShortner(log *logrus.Logger, metrics metrics.Metrics) svc.URLShortner {
 	redisAddr := viper.GetString("redis_addr")
 	redisPassword := viper.GetString("redis_addr")
 	redisDB := viper.GetInt("redis_db")
@@ -71,8 +72,7 @@ func buildURLShortner(log *logrus.Logger, metrics *svc.Metrics) *svc.URLShortner
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create shortPathStore")
 	}
-	urlShortner := svc.NewURLShortner(6, targetURLStore, shortPathStore, metrics)
-	return &urlShortner
+	return svc.NewURLShortner(6, targetURLStore, shortPathStore, metrics)
 }
 
 func RequestIDMiddleware(next http.Handler) http.Handler {

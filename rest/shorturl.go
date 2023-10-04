@@ -17,13 +17,20 @@ const (
 
 type RequestIDKey string
 
-type ShortURLHandler struct {
-	urlShortner *svc.URLShortner
+type ShortURLHandler interface {
+	Create(w http.ResponseWriter, r *http.Request)
+	Get(w http.ResponseWriter, r *http.Request)
+	Put(w http.ResponseWriter, r *http.Request)
+	Delete(w http.ResponseWriter, r *http.Request)
+}
+
+type shortURLHandler struct {
+	urlShortner svc.URLShortner
 	log         *logrus.Logger
 }
 
-func NewShortURLHandler(log *logrus.Logger, urlShortner *svc.URLShortner) *ShortURLHandler {
-	return &ShortURLHandler{
+func NewShortURLHandler(log *logrus.Logger, urlShortner svc.URLShortner) ShortURLHandler {
+	return &shortURLHandler{
 		log:         log,
 		urlShortner: urlShortner,
 	}
@@ -40,7 +47,7 @@ type Response struct {
 	Message   string `json:"message"`
 }
 
-func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
+func (s *shortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID, _ := r.Context().Value(RequestIDKey("requestID")).(string)
 	log := s.log.WithField("requestID", requestID)
 	log.Infof("Received request. %s %s", r.Method, r.URL.Path)
@@ -88,7 +95,7 @@ func (s *ShortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 	log.Infof("Sent response. shortPath:%s", shortPath)
 }
 
-func (s *ShortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
+func (s *shortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
 	requestID, _ := r.Context().Value(RequestIDKey("requestID")).(string)
 	log := s.log.WithField("requestID", requestID)
 	log.Infof("Received request. %s %s", r.Method, r.URL.Path)
@@ -106,11 +113,11 @@ func (s *ShortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
 	log.Infof("Redirected. %s->%s", shortPath, targetURL)
 }
 
-func (s *ShortURLHandler) Put(w http.ResponseWriter, r *http.Request) {
+func (s *shortURLHandler) Put(w http.ResponseWriter, r *http.Request) {
 	//TODO: Implement
 }
 
-func (s *ShortURLHandler) Delete(w http.ResponseWriter, r *http.Request) {
+func (s *shortURLHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	//TODO: Implement
 }
 
