@@ -93,8 +93,8 @@ func (s *shortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 			w.Write(marshalMessage(requestID, "Something went wrong"))
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 		w.Write(marshalMessage(requestID, err.Error()))
+		w.Header().Set("Content-Type", "application/json")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
