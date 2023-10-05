@@ -2,22 +2,11 @@ package svc
 
 import (
 	"context"
-	"math/rand"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/thenilesh/url-shortner/metrics"
 	"github.com/thenilesh/url-shortner/store"
-)
-
-type Mode string
-
-const (
-	Random Mode = "Random"
-	Phrase Mode = "Phrase"
-
-	charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 )
 
 type URLShortner interface {
@@ -26,23 +15,12 @@ type URLShortner interface {
 }
 
 type urlShortner struct {
-	mode   Mode
-	length int
+	randomStrGen RandomStrGen
 	// Maps shortPath to targetURL
 	targetURLStore store.KVStore
 	// Maps targetURL to shortPath
 	shortPathStore store.KVStore
 	metrics        metrics.Metrics
-}
-
-func NewURLShortner(length int, targetURLStore store.KVStore, shortPathStore store.KVStore, metrics metrics.Metrics) URLShortner {
-	return &urlShortner{
-		mode:           Random,
-		length:         length,
-		targetURLStore: targetURLStore,
-		shortPathStore: shortPathStore,
-		metrics:        metrics,
-	}
 }
 
 func (u *urlShortner) GetTargetURL(ctx context.Context, shortPath string) (string, error) {
@@ -84,49 +62,54 @@ func (u *urlShortner) CreateShortPath(ctx context.Context, shortPath string, tar
 	if found { // isTargetURLAlreadyShortened
 		return existingShortPath, nil
 	}
+	if len(shortPath) == 0 {
+		shortPath, err = u.findAvailableShortPath(ctx, u.targetURLStore)
+		if err != nil {
+			return "", err
+		}
+	}
 	return u.doShorten(ctx, shortPath, targetURL)
 }
 
-func (u *urlShortner) doShorten(ctx context.Context, shortPath string, targetURL string) (string, error) {
-	var shouldGenerateShortPath bool
-	if len(shortPath) == 0 {
-		shortPath = u.generateShortPath()
-		shouldGenerateShortPath = true
+// findAvailableShortPath finds a randomly generated shortPath that is not already taken
+func (u *urlShortner) findAvailableShortPath(ctx context.Context, store store.KVStore) (string, error) {
+	var err error
+	var alreadyExists bool
+	for i := 0; i < 3; i++ {
+		shortPath := u.randomStrGen.Generate()
+		if alreadyExists, err = u.targetURLStore.Exists(ctx, shortPath); err != nil {
+			return "", NewErrServerError("could not check if shortpath exists", err)
+		}
+		if !alreadyExists {
+			return shortPath, nil
+		}
 	}
+	return "", NewErrServerError("failed to generate available short_path", nil)
+}
+
+func (u *urlShortner) doShorten(ctx context.Context, shortPath string, targetURL string) (string, error) {
+
 	// FIXME: Get/Exists and Put calls from this file are not atomic.
 	// This can lead to following inconsistent states.
 	// i. existing shortpath gets replaced, both returns success
 	// ii. Same targetURL gets shortened twice with different shortpaths
-	var err error
-	var found bool
-	for i := 0; i < 3; i++ {
-		if found, err = u.targetURLStore.Exists(ctx, shortPath); err != nil {
-			return "", NewErrServerError("could not check if shortpath exists", err)
-		}
-		if found && shouldGenerateShortPath {
-			shortPath = u.generateShortPath()
-			continue
-		}
-		if found {
-			return "", NewErrConflict("shortpath already exists")
-		}
-		err = u.targetURLStore.Put(ctx, shortPath, targetURL)
-		if err != nil {
-			return "", NewErrServerError("could not save shortpath", err)
-		}
-		err = u.shortPathStore.Put(ctx, targetURL, shortPath)
-		if err != nil {
-			errDelete := u.targetURLStore.Delete(ctx, shortPath)
-			if errDelete != nil {
-				// TODO: Log error
-				return "", NewErrServerError("could not delete shortpath from store", errDelete)
-			}
-			return "", NewErrServerError("could not save targetURL", err)
-		}
-		u.metrics.GetCollector("domain_shortens").Inc(extractDomainFromURL(targetURL))
-		return shortPath, nil
+
+	err := u.targetURLStore.Put(ctx, shortPath, targetURL)
+	if err != nil {
+		return "", NewErrServerError("could not save shortpath", err)
 	}
-	return "", NewErrServerError("could not find available short path", nil)
+	err = u.shortPathStore.Put(ctx, targetURL, shortPath)
+	if err != nil {
+		errDelete := u.targetURLStore.Delete(ctx, shortPath)
+		if errDelete != nil {
+			// TODO: Log error
+			return "", NewErrServerError("could not delete shortpath from store", errDelete)
+		}
+		return "", NewErrServerError("could not save targetURL", err)
+	}
+	u.metrics.GetCollector("domain_shortens").Inc(extractDomainFromURL(targetURL))
+	return shortPath, nil
+
 }
 
 func (u *urlShortner) lookupTargetURL(ctx context.Context, shortPath string) (string, bool, error) {
@@ -151,19 +134,6 @@ func (u *urlShortner) lookupShortPath(ctx context.Context, targetURL string) (st
 	return shortPath, true, nil
 }
 
-func (u *urlShortner) generateShortPath() string {
-	if u.mode == Phrase {
-		// TODO: Implement
-		panic("phrase mode not implemented")
-	}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	randomBytes := make([]byte, u.length)
-	for i := range randomBytes {
-		randomBytes[i] = charset[r.Intn(len(charset))]
-	}
-	return string(randomBytes)
-}
-
 func validateTargetURL(targetURL string) error {
 	if len(targetURL) != len(strings.TrimSpace(targetURL)) {
 		return NewErrValidation("targetURL contains leading or trailing spaces")
@@ -177,15 +147,19 @@ func validateTargetURL(targetURL string) error {
 
 func validateShortPath(shortPath string) error {
 	if len(shortPath) != len(strings.TrimSpace(shortPath)) {
-		return NewErrValidation("shortPath contains leading or trailing spaces")
+		return NewErrValidation("short_path contains leading or trailing spaces")
 	}
 	for _, c := range shortPath {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
-			return NewErrValidation("shortPath contains invalid characters")
+		// Allow alphanumeric, - and _
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return NewErrValidation("short_path contains disallowed characters")
 		}
 	}
 	if shortPath == "metrics" {
-		return NewErrValidation("shortPath is reserved")
+		return NewErrValidation("this short_path is reserved")
+	}
+	if len(shortPath) > 50 {
+		return NewErrValidation("short_path is too long")
 	}
 	return nil
 }

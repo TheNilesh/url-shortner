@@ -21,14 +21,16 @@ func TestURLShortner_CreateShortPath(t *testing.T) {
 	metrics := new(mocks.Metrics)
 	collector := new(mocks.Collector)
 
-	shortner := NewURLShortner(6, targetURLStore, shortPathStore, metrics)
+	shortner := NewURLShortnerBuilder().
+		SetTargetURLStore(targetURLStore).
+		SetShortPathStore(shortPathStore).
+		SetMetrics(metrics).
+		Build()
 
 	shortPathExpected := "abc123"
 	targetURLExpected := "https://www.google.com"
 	targetURLStore.On("Get", ctx, shortPathExpected).Return("", store.ErrKeyNotFound)
-	targetURLStore.On("Exists", ctx, shortPathExpected).Return(false, nil)
 	targetURLStore.On("Put", ctx, shortPathExpected, targetURLExpected).Return(nil)
-	// targetURLStore.On("Delete", ctx, shortPathExpected).Return(nil)
 	shortPathStore.On("Get", ctx, targetURLExpected).Return("", store.ErrKeyNotFound)
 	shortPathStore.On("Put", ctx, targetURLExpected, shortPathExpected).Return(nil)
 	collector.On("Inc", mock.Anything).Once()
@@ -50,7 +52,11 @@ func TestURLShortner_GetTargetURL(t *testing.T) {
 	shortPathStore := new(storemocks.KVStore)
 	metrics := new(mocks.Metrics)
 
-	shortner := NewURLShortner(6, targetURLStore, shortPathStore, metrics)
+	shortner := NewURLShortnerBuilder().
+		SetTargetURLStore(targetURLStore).
+		SetShortPathStore(shortPathStore).
+		SetMetrics(metrics).
+		Build()
 
 	targetURLStore.On("Get", ctx, "abc123").Return("https://www.google.com", nil)
 	targetURLStore.On("Get", ctx, "invalid_shortpath").Return("", errors.New("not found"))
