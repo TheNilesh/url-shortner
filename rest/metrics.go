@@ -27,7 +27,7 @@ func NewMetricsHandler(log *logrus.Logger, m metrics.Metrics) MetricsHandler {
 func (m *metricsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "text/plain")
-	for _, kv := range m.metrics.GetDomainCounts() {
+	for _, kv := range m.metrics.GetCollector("domain_shortens").GetMaxValuePairs(3) {
 		w.Write([]byte(kv.Key))
 		w.Write([]byte(": "))
 		w.Write([]byte(fmt.Sprintf("%d", kv.Value)))

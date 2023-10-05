@@ -123,7 +123,7 @@ func (u *urlShortner) doShorten(ctx context.Context, shortPath string, targetURL
 			}
 			return "", NewErrServerError("could not save targetURL", err)
 		}
-		u.metrics.IncDomainCount(extractDomainFromURL(targetURL))
+		u.metrics.GetCollector("domain_shortens").Inc(extractDomainFromURL(targetURL))
 		return shortPath, nil
 	}
 	return "", NewErrServerError("could not find available short path", nil)

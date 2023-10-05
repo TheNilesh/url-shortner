@@ -18,7 +18,7 @@ import (
 const appName = "url-shortner"
 
 func main() {
-
+	// TODO: Main function is too big, need to refactor by adding app.go
 	initViper()
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("fatal error config file: %s", err))

@@ -9,20 +9,32 @@ type KeyValuePair struct {
 	Value int
 }
 
-type MaxHeap []KeyValuePair
+type Heap interface {
+	heap.Interface
+	IncOrPush(key string)
+	GetMaxValuePairs(n int) []KeyValuePair
+}
 
-func (h MaxHeap) Len() int           { return len(h) }
-func (h MaxHeap) Less(i, j int) bool { return h[i].Value >= h[j].Value }
-func (h MaxHeap) Swap(i, j int) {
+func NewHeap() Heap {
+	h := &maxHeap{}
+	heap.Init(h)
+	return h
+}
+
+type maxHeap []KeyValuePair
+
+func (h maxHeap) Len() int           { return len(h) }
+func (h maxHeap) Less(i, j int) bool { return h[i].Value > h[j].Value }
+func (h maxHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *MaxHeap) Push(x interface{}) {
+func (h *maxHeap) Push(x interface{}) {
 	kv := x.(KeyValuePair)
 	*h = append(*h, kv)
 }
 
-func (h *MaxHeap) Pop() interface{} {
+func (h *maxHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
 	kv := old[n-1]
@@ -30,7 +42,7 @@ func (h *MaxHeap) Pop() interface{} {
 	return kv
 }
 
-func (h MaxHeap) FindIndexByKey(key string) int {
+func (h maxHeap) findIndexByKey(key string) int {
 	for i, kv := range h {
 		if kv.Key == key {
 			return i
@@ -39,8 +51,8 @@ func (h MaxHeap) FindIndexByKey(key string) int {
 	return -1
 }
 
-func (h *MaxHeap) IncValue(key string) bool {
-	if index := h.FindIndexByKey(key); index != -1 {
+func (h *maxHeap) incValue(key string) bool {
+	if index := h.findIndexByKey(key); index != -1 {
 		(*h)[index].Value++
 		heap.Fix(h, index)
 		return true
@@ -50,15 +62,15 @@ func (h *MaxHeap) IncValue(key string) bool {
 
 // IncOrPush push a new entry with a value of 1 if the key doesn't exist,
 // or increments the value by one if the key exists.
-func (h *MaxHeap) IncOrPush(key string) {
-	if !h.IncValue(key) {
+func (h *maxHeap) IncOrPush(key string) {
+	if !h.incValue(key) {
 		heap.Push(h, KeyValuePair{Key: key, Value: 1})
 	}
 }
 
-func (h MaxHeap) Top3MaxHeapKeysValues() []KeyValuePair {
+func (h maxHeap) GetMaxValuePairs(n int) []KeyValuePair {
 	top3 := make([]KeyValuePair, 0)
-	for i := 0; i < 3 && i < len(h); i++ {
+	for i := 0; i < n && i < len(h); i++ {
 		top3 = append(top3, h[i])
 	}
 	return top3

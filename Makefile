@@ -18,6 +18,9 @@ build:
 test:
 	$(GOTEST) -v ./...
 
+cover:
+	$(GOTEST) -cover ./...
+
 clean:
 	$(GOCLEAN)
 	rm -rf $(BIN)/
@@ -42,5 +45,5 @@ redis-run:
 
 all: test build
 
-.PHONY: build test clean fmt run docker-build docker-run docker-push redis-run
+.PHONY: build test cover clean fmt run docker-build docker-run docker-push redis-run
 

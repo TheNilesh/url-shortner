@@ -1,42 +1,66 @@
 package metrics
 
-import "container/heap"
-
 type Metrics interface {
 	Start()
-	IncDomainCount(domain string)
-	GetDomainCounts() []KeyValuePair
+	GetCollector(name string) Collector
 }
 
 type metrics struct {
-	domainHeap MaxHeap
-	domainChan chan string
+	collectors map[string]Collector
 }
 
 func NewMetrics() Metrics {
 	m := &metrics{
-		domainHeap: MaxHeap{},
-		domainChan: make(chan string, 10),
+		// TODO: Externalize registration of collectors
+		collectors: map[string]Collector{
+			"domain_shortens": newCollector(10),
+		},
 	}
-	heap.Init(&m.domainHeap)
 	return m
 }
 
 func (m *metrics) Start() {
-	// TODO: introduce stop channel
-	go m.incDomainCounts()
-}
-
-func (m *metrics) IncDomainCount(domain string) {
-	m.domainChan <- domain
-}
-
-func (m *metrics) incDomainCounts() {
-	for domain := range m.domainChan {
-		m.domainHeap.IncOrPush(domain)
+	for _, c := range m.collectors {
+		c.Start()
 	}
 }
 
-func (m *metrics) GetDomainCounts() []KeyValuePair {
-	return m.domainHeap.Top3MaxHeapKeysValues()
+func (m *metrics) GetCollector(name string) Collector {
+	return m.collectors[name]
+}
+
+type Collector interface {
+	Start()
+	Inc(key string)
+	GetMaxValuePairs(n int) []KeyValuePair
+}
+
+type collector struct {
+	bufferChan chan string
+	heap       Heap
+}
+
+func newCollector(bufferSize int) Collector {
+	c := &collector{
+		bufferChan: make(chan string, bufferSize),
+		heap:       NewHeap(),
+	}
+	return c
+}
+
+func (c *collector) Start() {
+	// TODO: introduce stop channel
+	go func() {
+		for domain := range c.bufferChan {
+			c.heap.IncOrPush(domain)
+		}
+	}()
+}
+
+func (c *collector) Inc(key string) {
+	c.heap.IncOrPush(key)
+}
+
+func (c collector) GetMaxValuePairs(n int) []KeyValuePair {
+	return c.heap.GetMaxValuePairs(n)
 }

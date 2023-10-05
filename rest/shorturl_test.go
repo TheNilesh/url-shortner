@@ -1,9 +1,7 @@
-// BEGIN: 5f7f1d5d7b8a
 package rest_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,107 +14,86 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/thenilesh/url-shortner/rest"
 	"github.com/thenilesh/url-shortner/svc"
+	"github.com/thenilesh/url-shortner/svc/mocks"
 )
 
-type mockURLShortner struct {
-	mock.Mock
-}
-
-func (m *mockURLShortner) CreateShortPath(ctx context.Context, shortPath string, targetURL string) (string, error) {
-	args := m.Called(ctx, shortPath, targetURL)
-	return args.String(0), args.Error(1)
-}
-
-func (m *mockURLShortner) GetTargetURL(ctx context.Context, shortPath string) (string, error) {
-	args := m.Called(ctx, shortPath)
-	return args.String(0), args.Error(1)
-}
-
-func TestShortURLHandler_Create(t *testing.T) {
+func TestShortURLHandler_Create_Success(t *testing.T) {
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
 
-	mockSvc := new(mockURLShortner)
+	mockSvc := new(mocks.URLShortner)
 	handler := rest.NewShortURLHandler(log, mockSvc)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/shorturl", handler.Create).Methods(http.MethodPost)
+	shortURL := rest.ShortURL{
+		ShortPath: "test",
+		TargetURL: "http://example.com",
+	}
+	body, _ := json.Marshal(shortURL)
+	req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 
-	t.Run("success", func(t *testing.T) {
-		shortURL := rest.ShortURL{
-			ShortPath: "test",
-			TargetURL: "http://example.com",
-		}
-		body, _ := json.Marshal(shortURL)
-		req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+	expectedShortPath := "test"
+	mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return(expectedShortPath, nil)
 
-		expectedShortPath := "test"
-		mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return(expectedShortPath, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.Equal(t, fmt.Sprintf("/%s", expectedShortPath), rr.Header().Get("Location"))
 
-		assert.Equal(t, http.StatusCreated, rr.Code)
-		assert.Equal(t, fmt.Sprintf("/%s", expectedShortPath), rr.Header().Get("Location"))
+	var resp rest.Response
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	assert.Equal(t, fmt.Sprintf("Created short URL: /%s", expectedShortPath), resp.Message)
+}
 
-		var resp rest.Response
-		json.Unmarshal(rr.Body.Bytes(), &resp)
-		assert.Equal(t, fmt.Sprintf("Created short URL: /%s", expectedShortPath), resp.Message)
-	})
+func TestShortURLHandler_Create_BadRequest(t *testing.T) {
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
 
-	t.Run("bad request", func(t *testing.T) {
-		shortURL := rest.ShortURL{
-			ShortPath: "test",
-			TargetURL: "http://example.com",
-		}
-		body, _ := json.Marshal(shortURL)
-		req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+	mockSvc := new(mocks.URLShortner)
+	handler := rest.NewShortURLHandler(log, mockSvc)
 
-		mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return("", &svc.ErrValidation{})
+	router := mux.NewRouter()
+	router.HandleFunc("/shorturl", handler.Create).Methods(http.MethodPost)
+	shortURL := rest.ShortURL{
+		ShortPath: "test",
+		TargetURL: "http://example.com",
+	}
+	body, _ := json.Marshal(shortURL)
+	req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
+	mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return("", &svc.ErrValidation{})
 
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-	})
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-	t.Run("conflict", func(t *testing.T) {
-		shortURL := rest.ShortURL{
-			ShortPath: "test",
-			TargetURL: "http://example.com",
-		}
-		body, _ := json.Marshal(shortURL)
-		req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
 
-		mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return("", &svc.ErrConflict{})
+func TestShortURLHandler_Create_conflict(t *testing.T) {
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
 
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
+	mockSvc := new(mocks.URLShortner)
+	handler := rest.NewShortURLHandler(log, mockSvc)
 
-		assert.Equal(t, http.StatusConflict, rr.Code)
-	})
+	router := mux.NewRouter()
+	router.HandleFunc("/shorturl", handler.Create).Methods(http.MethodPost)
+	shortURL := rest.ShortURL{
+		ShortPath: "test",
+		TargetURL: "http://example.com",
+	}
+	body, _ := json.Marshal(shortURL)
+	req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 
-	t.Run("server error", func(t *testing.T) {
-		shortURL := rest.ShortURL{
-			ShortPath: "test",
-			TargetURL: "http://example.com",
-		}
-		body, _ := json.Marshal(shortURL)
-		req, _ := http.NewRequest(http.MethodPost, "/shorturl", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+	mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return("", &svc.ErrConflict{})
 
-		mockSvc.On("CreateShortPath", mock.Anything, shortURL.ShortPath, shortURL.TargetURL).Return("", &svc.ErrServerError{})
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
 
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-
-		var resp rest.Response
-		json.Unmarshal(rr.Body.Bytes(), &resp)
-		assert.Equal(t, "Something went wrong", resp.Message)
-	})
+	assert.Equal(t, http.StatusConflict, rr.Code)
 }

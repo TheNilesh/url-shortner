@@ -51,7 +51,9 @@ func (s *shortURLHandler) Create(w http.ResponseWriter, r *http.Request) {
 	requestID, _ := r.Context().Value(RequestIDKey("requestID")).(string)
 	log := s.log.WithField("requestID", requestID)
 	log.Infof("Received request. %s %s", r.Method, r.URL.Path)
-	// TODO: Handle case when request is cancelled by client using context
+	// TODO: If request times out from client side goroutine processing the
+	// request will continue to run. Hence add timed context
+
 	// Prevent OOM/buffer overflow
 	limitReader := io.LimitReader(r.Body, maxRequestBodySize)
 	var shortURL ShortURL
@@ -117,7 +119,7 @@ func (s *shortURLHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, targetURL, http.StatusMovedPermanently)
-	log.Infof("Redirected. %s->%s", shortPath, targetURL)
+	log.Infof("Redirected[%s] -> %s", shortPath, targetURL)
 }
 
 func (s *shortURLHandler) Put(w http.ResponseWriter, r *http.Request) {
