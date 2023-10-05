@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/thenilesh/url-shortner/metrics"
-	"github.com/thenilesh/url-shortner/metrics/mocks"
+	"github.com/thenilesh/url-shortner/mocks"
 	"github.com/thenilesh/url-shortner/rest"
 )
 

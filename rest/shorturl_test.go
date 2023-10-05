@@ -12,9 +12,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/thenilesh/url-shortner/mocks"
 	"github.com/thenilesh/url-shortner/rest"
 	"github.com/thenilesh/url-shortner/svc"
-	"github.com/thenilesh/url-shortner/svc/mocks"
 )
 
 func TestShortURLHandler_Create_Success(t *testing.T) {

@@ -9,15 +9,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/thenilesh/url-shortner/store"
 
-	"github.com/thenilesh/url-shortner/metrics/mocks"
-	storemocks "github.com/thenilesh/url-shortner/store/mocks"
+	"github.com/thenilesh/url-shortner/mocks"
 )
 
 func TestURLShortner_CreateShortPath(t *testing.T) {
 	ctx := context.Background()
 
-	targetURLStore := new(storemocks.KVStore)
-	shortPathStore := new(storemocks.KVStore)
+	targetURLStore := new(mocks.KVStore)
+	shortPathStore := new(mocks.KVStore)
 	metrics := new(mocks.Metrics)
 	collector := new(mocks.Collector)
 
@@ -48,8 +47,8 @@ func TestURLShortner_CreateShortPath(t *testing.T) {
 func TestURLShortner_GetTargetURL(t *testing.T) {
 	ctx := context.Background()
 
-	targetURLStore := new(storemocks.KVStore)
-	shortPathStore := new(storemocks.KVStore)
+	targetURLStore := new(mocks.KVStore)
+	shortPathStore := new(mocks.KVStore)
 	metrics := new(mocks.Metrics)
 
 	shortner := NewURLShortnerBuilder().
