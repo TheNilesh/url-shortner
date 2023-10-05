@@ -4,11 +4,13 @@ An app that provides easy to remember links to the pages on the internet
 
 ## Installation
 
-    # with docker
-    docker run -p 8080:8080thenilesh/url-shortner:latest # or simply make docker-run
-    # We need redis to run this hence
-    docker run -d -p 6379:6379 redis # make redis-run
+    docker run -d -p 6379:6379 redis
     # if network configuration is not messy on your end then redis should be discovered
+
+    docker run -p 8080:8080 --network=host thenilesh/url-shortner:latest
+
+    # Install REST Client extension in vs code
+    # and use request samples from testdata/tests.http
 
 ## Development
 
@@ -21,7 +23,7 @@ An app that provides easy to remember links to the pages on the internet
     # docker build
     make docker-build
 
-    # Feel free to explore makefile
+    # Check Makefile for other options
 
 ## Design Overview for Developers
 
@@ -29,4 +31,4 @@ An app that provides easy to remember links to the pages on the internet
 
 - The rest package is front controller.
 - svc package is use case package. It holds domain logic
-- store package is repository package. It holds logic related to persistence
+- store package is repository package. It holds logic related to persistence.
