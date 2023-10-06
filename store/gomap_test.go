@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGoMapStore(t *testing.T) {
@@ -18,6 +20,14 @@ func TestGoMapStore(t *testing.T) {
 	}
 	if val != "value1" {
 		t.Errorf("Expected value1, got %v", val)
+	}
+
+	val, err = store.Get(context.Background(), "notfoundkey")
+	if val != "" {
+		t.Errorf("Expected empty value, got %v", val)
+	}
+	if err != nil {
+		assert.Equal(t, err, ErrKeyNotFound)
 	}
 
 	exists, err := store.Exists(context.Background(), "key1")

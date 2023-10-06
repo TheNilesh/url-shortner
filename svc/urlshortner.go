@@ -136,11 +136,14 @@ func (u *urlShortner) lookupShortPath(ctx context.Context, targetURL string) (st
 
 func validateTargetURL(targetURL string) error {
 	if len(targetURL) != len(strings.TrimSpace(targetURL)) {
-		return NewErrValidation("targetURL contains leading or trailing spaces")
+		return NewErrValidation("target_url contains leading or trailing spaces")
 	}
-	_, err := url.Parse(targetURL)
+	u, err := url.Parse(targetURL)
 	if err != nil {
-		return NewErrValidation("targetURL is not valid")
+		return NewErrValidation("target_url is not valid")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return NewErrValidation("target_url is not valid")
 	}
 	return nil
 }
@@ -149,14 +152,11 @@ func validateShortPath(shortPath string) error {
 	if len(shortPath) != len(strings.TrimSpace(shortPath)) {
 		return NewErrValidation("short_path contains leading or trailing spaces")
 	}
-	for _, c := range shortPath {
-		// Allow alphanumeric, - and _
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
-			return NewErrValidation("short_path contains disallowed characters")
-		}
+	if !isValidPathSegment(shortPath) {
+		return NewErrValidation("short_path contains disallowed characters")
 	}
 	if shortPath == "metrics" {
-		return NewErrValidation("this short_path is reserved")
+		return NewErrValidation("short_path is reserved")
 	}
 	if len(shortPath) > 50 {
 		return NewErrValidation("short_path is too long")
@@ -176,4 +176,22 @@ func removeTrailingSlash(targetURL string) string {
 func extractDomainFromURL(rawURL string) string {
 	u, _ := url.Parse(rawURL)
 	return u.Hostname()
+}
+
+// isValidPathSegment checks if charset contains only
+// characters that are allowed in URL path segment
+func isValidPathSegment(charset string) bool {
+	for _, char := range charset {
+		if !isValidPathSegmentChar(char) {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidPathSegmentChar(char rune) bool {
+	return (char >= 'a' && char <= 'z') ||
+		(char >= 'A' && char <= 'Z') ||
+		(char >= '0' && char <= '9') ||
+		char == '-' || char == '_'
 }

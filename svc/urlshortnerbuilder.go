@@ -1,6 +1,8 @@
 package svc
 
 import (
+	"errors"
+
 	"github.com/thenilesh/url-shortner/metrics"
 	"github.com/thenilesh/url-shortner/store"
 )
@@ -52,33 +54,34 @@ func (b *URLShortnerBuilder) SetMetrics(metrics metrics.Metrics) *URLShortnerBui
 	return b
 }
 
-func (b *URLShortnerBuilder) Build() URLShortner {
+func (b *URLShortnerBuilder) Build() (URLShortner, error) {
 	if b.targetURLStore == nil {
-		panic("targetURLStore is nil")
+		return nil, errors.New("targetURLStore is nil")
 	}
 	if b.shortPathStore == nil {
-		panic("shortPathStore is nil")
+		return nil, errors.New("shortPathStore is nil")
 	}
 	if b.metrics == nil {
-		panic("metrics is nil")
+		return nil, errors.New("metrics is nil")
 	}
-	if b.minLength > b.maxLength {
-		panic("minLength is greater than maxLength")
-	}
-	if b.minLength <= 0 {
-		panic("minLength is less than or equal to 0")
-	}
-	if b.maxLength <= 0 {
-		panic("maxLength is less than or equal to 0")
+	if b.minLength <= 0 || b.maxLength <= 0 {
+		return nil, errors.New("minLength or maxLength is less than or equal to 0")
 	}
 	if b.minLength > 50 || b.maxLength > 50 {
-		panic("minLength or maxLength is greater than 50")
+		return nil, errors.New("minLength or maxLength is greater than 50")
 	}
+	if b.minLength > b.maxLength {
+		return nil, errors.New("minLength is greater than maxLength")
+	}
+	if !isValidPathSegment(b.charset) {
+		return nil, errors.New("charset contains invalid characters")
+	}
+
 	randomStrGen := NewRandomStrGen(b.minLength, b.maxLength, b.charset)
 	return &urlShortner{
 		randomStrGen:   randomStrGen,
 		targetURLStore: b.targetURLStore,
 		shortPathStore: b.shortPathStore,
 		metrics:        b.metrics,
-	}
+	}, nil
 }

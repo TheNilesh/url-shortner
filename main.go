@@ -74,11 +74,16 @@ func buildURLShortner(log *logrus.Logger, metrics metrics.Metrics) svc.URLShortn
 	if err != nil {
 		log.WithError(err).Fatal("Failed to create shortPathStore")
 	}
-	return svc.NewURLShortnerBuilder().
+	us, err := svc.NewURLShortnerBuilder().
 		SetTargetURLStore(targetURLStore).
+		SetCharset("abcdefghijklmnopqrstuvwxyz0123456789").
 		SetShortPathStore(shortPathStore).
 		SetMetrics(metrics).
 		Build()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to create URLShortner")
+	}
+	return us
 }
 
 func RequestIDMiddleware(next http.Handler) http.Handler {

@@ -1,11 +1,4 @@
 GOCMD = go
-GOBUILD = $(GOCMD) build
-GORUN = $(GOCMD) run
-GOCLEAN = $(GOCMD) clean
-GOFMT = $(GOCMD) fmt
-GOTEST = $(GOCMD) test
-GOGET = $(GOCMD) get
-
 BINARY_NAME = url-shortner
 BIN = ./bin
 
@@ -13,23 +6,24 @@ DOCKER_IMAGE_NAME = thenilesh/url-shortner
 DOCKER_IMAGE_TAG ?= latest
 
 build:
-	$(GOBUILD) -o $(BIN)/$(BINARY_NAME) -v
+	$(GOCMD) build -o $(BIN)/$(BINARY_NAME) -v
 
 test:
-	$(GOTEST) -v ./...
+	$(GOCMD) test -v ./...
 
 cover:
-	$(GOTEST) -cover ./...
+	$(GOCMD) test -coverprofile=coverage.out ./...
+	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
 clean:
-	$(GOCLEAN)
+	$(GOCMD) clean
 	rm -rf $(BIN)/
 
 fmt:
-	$(GOFMT) ./...
+	$(GOCMD) fmt ./...
 
 run:
-	$(GORUN) main.go
+	$(GOCMD) run main.go
 
 docker-build: clean
 	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
